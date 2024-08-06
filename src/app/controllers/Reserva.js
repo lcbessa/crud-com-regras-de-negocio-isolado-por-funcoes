@@ -6,6 +6,7 @@ import {
   differenceInMinutes,
   getMinutes,
 } from "date-fns";
+import { validarId } from "../../utils/validacoes";
 
 const prisma = new PrismaClient();
 
@@ -14,10 +15,7 @@ export default {
     try {
       let { dataHoraInicio, dataHoraFim, laboratorioId } = request.body;
 
-      // Relação com Laboratório (Verifica se o laboratório está ativo)
-      const laboratorio = await prisma.laboratorio.findUnique({
-        where: { id: laboratorioId },
-      });
+      const laboratorio = await buscarLaboratorioPorId(laboratorioId);
 
       if (!laboratorio || !laboratorio.ativo) {
         return response
@@ -66,16 +64,9 @@ export default {
           error: "A reserva deve começar e terminar no mesmo dia.",
         });
       }
-      // Duração Mínima de Reserva (A reserva deve ter no mínimo 1 hora de duração.)
-      const diferencaEmMinutos = differenceInMinutes(
-        dataHoraFim,
-        dataHoraInicio
-      );
-      if (diferencaEmMinutos < 60) {
-        return response
-          .status(400)
-          .send({ error: "A reserva deve ter no mínimo 1 hora de duração." });
-      }
+      // Duração Mínima de Reserva
+      let resposta = duracaoMinimaReserva(dataHoraInicio, dataHoraFim);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
       // 	Restrição de horário da Reserva (A reserva deve começar e terminar em horas cheias ou meias horas.)
       if (
@@ -91,39 +82,13 @@ export default {
       }
 
       // Conflito de Horários de Reserva (Não pode haver conflito de horários de reserva)
-      const conflito = await prisma.reserva.findFirst({
-        where: {
-          laboratorioId,
-          OR: [
-            {
-              // A nova reserva começa durante uma reserva existente
-              AND: [
-                { dataHoraInicio: { lte: dataHoraInicio } }, // A reserva existente começa antes ou no mesmo instante que a nova reserva
-                { dataHoraFim: { gte: dataHoraInicio } }, // A reserva existente termina depois ou no mesmo instante que o início da nova reserva
-              ],
-            },
-            {
-              // A nova reserva termina durante uma reserva existente
-              AND: [
-                { dataHoraInicio: { lte: dataHoraFim } }, // A reserva existente começa antes ou no mesmo instante que o fim da nova reserva
-                { dataHoraFim: { gte: dataHoraFim } }, // A reserva existente termina depois ou no mesmo instante que o fim da nova reserva
-              ],
-            },
-            {
-              // A nova reserva engloba completamente uma reserva existente
-              AND: [
-                { dataHoraInicio: { gte: dataHoraInicio } }, // A reserva existente começa depois ou no mesmo instante que o início da nova reserva
-                { dataHoraFim: { lte: dataHoraFim } }, // A reserva existente termina antes ou no mesmo instante que o fim da nova reserva
-              ],
-            },
-          ],
-        },
-      });
-
+      const conflito = await conflitoReserva(
+        dataHoraInicio,
+        dataHoraFim,
+        laboratorioId
+      );
       if (conflito) {
-        return response
-          .status(400)
-          .send({ error: "Conflito de horários de reserva." });
+        return response.status(400).send({ error: "Conflito de horários." });
       }
 
       const reservaCriada = await prisma.reserva.create({
@@ -150,20 +115,10 @@ export default {
   async listarUmaReserva(request, response) {
     try {
       const { id } = request.params;
-      const reserva = await prisma.reserva.findUnique({
-        where: { id: Number(id) },
-        include: {
-          laboratorio: true,
-          usuario: {
-            select: {
-              id: true,
-              nome: true,
-              email: true,
-            },
-          },
-        },
-      });
+      let resposta = validarId(id);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
+      const reserva = await buscarReservaPorId(id);
       if (!reserva) {
         return response.status(404).send({ error: "Reserva não encontrada." });
       }
@@ -206,10 +161,10 @@ export default {
       const { id } = request.params; // Recebe o ID da reserva a ser atualizada
       let { dataHoraInicio, dataHoraFim } = request.body;
 
-      // Verifica se a reserva existe
-      const reserva = await prisma.reserva.findUnique({
-        where: { id: Number(id) },
-      });
+      let resposta = validarId(id);
+      if (resposta) return response.status(resposta.status).json(resposta);
+
+      const reserva = await buscarReservaPorId(id);
 
       if (!reserva) {
         return response.status(400).send({ error: "Reserva não encontrada." });
@@ -284,34 +239,11 @@ export default {
       }
 
       // Conflito de Horários de Reserva (Não pode haver conflito de horários de reserva)
-      const conflito = await prisma.reserva.findFirst({
-        where: {
-          OR: [
-            {
-              // A nova reserva começa durante uma reserva existente
-              AND: [
-                { dataHoraInicio: { lte: dataHoraInicio } }, // A reserva existente começa antes ou no mesmo instante que a nova reserva
-                { dataHoraFim: { gte: dataHoraInicio } }, // A reserva existente termina depois ou no mesmo instante que o início da nova reserva
-              ],
-            },
-            {
-              // A nova reserva termina durante uma reserva existente
-              AND: [
-                { dataHoraInicio: { lte: dataHoraFim } }, // A reserva existente começa antes ou no mesmo instante que o fim da nova reserva
-                { dataHoraFim: { gte: dataHoraFim } }, // A reserva existente termina depois ou no mesmo instante que o fim da nova reserva
-              ],
-            },
-            {
-              // A nova reserva engloba completamente uma reserva existente
-              AND: [
-                { dataHoraInicio: { gte: dataHoraInicio } }, // A reserva existente começa depois ou no mesmo instante que o início da nova reserva
-                { dataHoraFim: { lte: dataHoraFim } }, // A reserva existente termina antes ou no mesmo instante que o fim da nova reserva
-              ],
-            },
-          ],
-          NOT: { id: Number(id) }, // Exclui a própria reserva da verificação de conflitos
-        },
-      });
+      const conflito = await conflitoReserva(
+        dataHoraInicio,
+        dataHoraFim,
+        reserva.laboratorioId
+      );
 
       if (conflito) {
         return response
@@ -387,3 +319,66 @@ export default {
     }
   },
 };
+async function buscarLaboratorioPorId(id) {
+  const laboratorio = await prisma.laboratorio.findUnique({
+    where: { id: Number(id) },
+  });
+  return laboratorio;
+}
+function duracaoMinimaReserva(dataHoraInicio, dataHoraFim) {
+  const diferencaEmMinutos = differenceInMinutes(dataHoraFim, dataHoraInicio);
+  if (diferencaEmMinutos < 60) {
+    return {
+      status: 400,
+      error: "A reserva deve ter no mínimo 1 hora de duração.",
+    };
+  }
+  return null;
+}
+async function conflitoReserva(dataHoraInicio, dataHoraFim, laboratorioId) {
+  const conflito = await prisma.reserva.findFirst({
+    where: {
+      laboratorioId,
+      OR: [
+        {
+          // A nova reserva começa durante uma reserva existente
+          AND: [
+            { dataHoraInicio: { lte: dataHoraInicio } }, // A reserva existente começa antes ou no mesmo instante que a nova reserva
+            { dataHoraFim: { gte: dataHoraInicio } }, // A reserva existente termina depois ou no mesmo instante que o início da nova reserva
+          ],
+        },
+        {
+          // A nova reserva termina durante uma reserva existente
+          AND: [
+            { dataHoraInicio: { lte: dataHoraFim } }, // A reserva existente começa antes ou no mesmo instante que o fim da nova reserva
+            { dataHoraFim: { gte: dataHoraFim } }, // A reserva existente termina depois ou no mesmo instante que o fim da nova reserva
+          ],
+        },
+        {
+          // A nova reserva engloba completamente uma reserva existente
+          AND: [
+            { dataHoraInicio: { gte: dataHoraInicio } }, // A reserva existente começa depois ou no mesmo instante que o início da nova reserva
+            { dataHoraFim: { lte: dataHoraFim } }, // A reserva existente termina antes ou no mesmo instante que o fim da nova reserva
+          ],
+        },
+      ],
+    },
+  });
+  return conflito;
+}
+async function buscarReservaPorId(id) {
+  const reserva = await prisma.reserva.findUnique({
+    where: { id: Number(id) },
+    include: {
+      laboratorio: true,
+      usuario: {
+        select: {
+          id: true,
+          nome: true,
+          email: true,
+        },
+      },
+    },
+  });
+  return reserva;
+}

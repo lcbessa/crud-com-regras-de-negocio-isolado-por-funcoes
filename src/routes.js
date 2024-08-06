@@ -3,7 +3,6 @@ import Usuario from "./app/controllers/Usuario";
 import Laboratorio from "./app/controllers/Laboratorio";
 import Reserva from "./app/controllers/Reserva";
 import { authenticateToken, authorizeAdmin } from "./app/middlewares/Auth";
-import { ro } from "date-fns/locale";
 const routes = Router();
 
 /**
@@ -27,29 +26,25 @@ routes.get(
 // Somente pessoas autenticadas e administradores podem criar laboratórios
 routes.post(
   "/laboratorios",
-  // authenticateToken,
-  // authorizeAdmin,
+  authenticateToken,
+  authorizeAdmin,
   Laboratorio.criarLaboratorio
 );
 // Somente pessoas autenticadas podem listar laboratórios
-routes.get(
-  "/laboratorios",
-  // authenticateToken,
-  Laboratorio.listarLaboratorios
-);
+routes.get("/laboratorios", authenticateToken, Laboratorio.listarLaboratorios);
 
 // Somente pessoas autenticadas podem listar um laboratório
 routes.get(
   "/laboratorio/:id",
-  // authenticateToken,
+  authenticateToken,
   Laboratorio.listarUmLaboratorio
 );
 
 // Somente pessoas autenticadas e administradores podem atualizar laboratórios
 routes.put(
   "/laboratorio/:id",
-  // authenticateToken,
-  // authorizeAdmin,
+  authenticateToken,
+  authorizeAdmin,
   Laboratorio.atualizarLaboratorio
 );
 
