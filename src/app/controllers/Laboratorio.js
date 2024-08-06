@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { tr } from "date-fns/locale";
+import { validarId, verificarCampoObrigatorio } from "../../utils/validacoes";
 
 const prisma = new PrismaClient();
 
@@ -7,44 +7,20 @@ export default {
   async criarLaboratorio(request, response) {
     try {
       const { nome, sigla } = request.body;
+      let resposta = null;
 
-      // Verifica se o campo "nome" não é nulo
-      if (!nome) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'nome' deve ser obrigatório." });
-      }
+      // Verifica se os campos obrigatórios estão presentes
+      resposta = verificarCampoObrigatorio(nome, "nome");
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Nome de Laboratório deve ser único
-      // Verifica se o nome já está em uso por outro laboratório
-      const laboratorioComNome = await prisma.laboratorio.findFirst({
-        where: { nome },
-      });
+      resposta = verificarCampoObrigatorio(sigla, "sigla");
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      if (laboratorioComNome) {
-        return response
-          .status(400)
-          .send({ error: "Laboratório com mesmo nome já existe!" });
-      }
+      resposta = await verificarCampoUnico(null, "nome", nome);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Sigla de Laboratório deve ser obrigatória
-      if (!sigla) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'sigla' deve ser obrigatório." });
-      }
-
-      // Sigla deve ser única
-      // Verifica se a sigla já está em uso por outro laboratório
-      const laboratorioComSigla = await prisma.laboratorio.findFirst({
-        where: { sigla },
-      });
-
-      if (laboratorioComSigla) {
-        return response
-          .status(400)
-          .send({ error: "Laboratório com mesma sigla já existe!" });
-      }
+      resposta = await verificarCampoUnico(null, "sigla", sigla);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
       const laboratorioCriado = await prisma.laboratorio.create({
         data: {
@@ -63,7 +39,6 @@ export default {
 
   async listarLaboratorios(request, response) {
     try {
-      // Lista todos os laboratórios em ordem alfabética
       const laboratorios = await prisma.laboratorio.findMany({
         orderBy: {
           nome: "asc",
@@ -80,21 +55,12 @@ export default {
   },
   async listarUmLaboratorio(request, response) {
     try {
-      // ID do laboratório a ser listado deve ser um número válido
       const { id } = request.params;
-      if (isNaN(id)) {
-        return response
-          .status(400)
-          .send({ error: "ID inválido: o ID deve ser um número válido." });
-      }
+      let resposta = validarId(id);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Procura o laboratório pelo ID único
-      const laboratorio = await prisma.laboratorio.findUnique({
-        where: { id: Number(id) },
-        include: { reservas: true },
-      });
+      const laboratorio = await buscarLaboratorioPorId(id);
 
-      // Verifica se o laboratório existe
       if (!laboratorio) {
         return response
           .status(404)
@@ -113,61 +79,28 @@ export default {
       const { id } = request.params;
       const { nome, sigla } = request.body;
 
-      // ID do laboratório a ser atualizado deve ser um número válido
-      if (isNaN(id)) {
-        return response
-          .status(400)
-          .send({ error: "ID inválido: o ID deve ser um número válido." });
-      }
+      let resposta = null;
+      resposta = validarId(id);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Procura o laboratório a ser atualizado pelo ID único
-      let laboratorio = await prisma.laboratorio.findUnique({
-        where: { id: Number(id) },
-      });
+      const laboratorio = await buscarLaboratorioPorId(id);
 
-      // Verifica se o laboratório existe
-      if (!laboratorio.ativo) {
+      if (!laboratorio || !laboratorio.ativo) {
         return response
           .status(404)
           .send({ error: "Laboratório não encontrado ou inativo." });
       }
-      // Nome de Laboratório deve ser obrigatório
-      if (!nome) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'nome' deve ser obrigatório." });
-      }
+      resposta = verificarCampoObrigatorio(nome, "nome");
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Verifica se o novo nome já está em uso por outro laboratório
-      const laboratorioComNome = await prisma.laboratorio.findFirst({
-        where: { nome, NOT: { id: Number(id) } },
-      });
+      resposta = verificarCampoObrigatorio(sigla, "sigla");
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Nome de Laboratório deve ser único
-      if (laboratorioComNome) {
-        return response
-          .status(400)
-          .send({ error: "Laboratório com mesmo nome já existe!" });
-      }
+      resposta = await verificarCampoUnico(id, "nome", nome);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      // Sigla de Laboratório deve ser obrigatória
-      if (!sigla) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'sigla' deve ser obrigatório." });
-      }
-
-      // Verifica se a nova sigla já está em uso por outro laboratório
-      const laboratorioComSigla = await prisma.laboratorio.findFirst({
-        where: { sigla, NOT: { id: Number(id) } },
-      });
-
-      // Sigla deve ser única
-      if (laboratorioComSigla) {
-        return response
-          .status(400)
-          .send({ error: "Laboratório com mesma sigla já existe!" });
-      }
+      resposta = await verificarCampoUnico(id, "sigla", sigla);
+      if (resposta) return response.status(resposta.status).json(resposta);
 
       laboratorio = await prisma.laboratorio.update({
         where: { id: Number(id) },
@@ -188,17 +121,12 @@ export default {
     try {
       const { id } = request.params;
 
-      if (isNaN(id)) {
-        return response
-          .status(400)
-          .send({ error: "ID inválido: o ID deve ser um número válido." });
-      }
+      let resposta = null;
 
-      // Procura o laboratório a ser excluido pelo ID
-      const laboratorio = await prisma.laboratorio.findUnique({
-        where: { id: Number(id) },
-        include: { reservas: true },
-      });
+      resposta = validarId(id);
+      if (resposta) return response.status(resposta.status).json(resposta);
+
+      const laboratorio = await buscarLaboratorioPorId(id);
 
       // Verifica se o laboratório existe
       if (!laboratorio) {
@@ -208,7 +136,6 @@ export default {
       }
 
       if (!laboratorio.reservas.length) {
-        // Exclui o laboratório  fisicamente do banco de dados se nunca teve reservas
         await prisma.laboratorio.delete({
           where: { id: Number(id) },
         });
@@ -250,3 +177,21 @@ export default {
     }
   },
 };
+async function verificarCampoUnico(id, campo, valorCampo) {
+  const campoProcurado = await prisma.laboratorio.findUnique({
+    where: { [campo]: valorCampo, NOT: { id: Number(id) } },
+  });
+  if (campoProcurado) {
+    return {
+      status: 400,
+      error: `Laboratório com mesma ${campo} já existe!`,
+    };
+  }
+  return null;
+}
+async function buscarLaboratorioPorId(id) {
+  const laboratorio = await prisma.laboratorio.findUnique({
+    where: { id: Number(id) },
+  });
+  return laboratorio;
+}

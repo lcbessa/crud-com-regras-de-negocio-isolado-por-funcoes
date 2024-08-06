@@ -1,44 +1,28 @@
-import jwt from "jsonwebtoken";
-import Autenticacao from "../../config/auth";
 import { PrismaClient } from "@prisma/client";
+import { gerarToken, verificarCampoObrigatorio } from "../../utils/validacoes";
 
 const prisma = new PrismaClient();
-
-const gerarToken = (userId, isAdmin) => {
-  return jwt.sign({ userId, isAdmin }, Autenticacao.secret, {
-    expiresIn: "1d",
-  });
-};
 
 export default {
   async criarUsuario(request, response) {
     try {
       const { nome, email, senha } = request.body;
-      // Verificar se o campo "nome" não é nulo
-      if (!nome) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'nome' não pode ser nulo." });
-      }
-      // Verificar se o campo "email" não é nulo
-      if (!email) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'email' não pode ser nulo." });
-      }
-      // Verificar se o campo "senha" não é nulo
-      if (!senha) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'senha' não pode ser nulo." });
-      }
-      // Verificar se o email já está em uso por outro usuário
-      const usuarioComEmail = await prisma.usuario.findUnique({
-        where: { email },
-      });
-      if (usuarioComEmail) {
+      let resposta = null;
+      resposta = verificarCampoObrigatorio(nome, "nome");
+      if (resposta) return response.status(resposta.status).json(resposta);
+
+      resposta = verificarCampoObrigatorio(email, "email");
+      if (resposta) return response.status(resposta.status).json(resposta);
+
+      resposta = verificarCampoObrigatorio(senha, "senha");
+      if (resposta) return response.status(resposta.status).json(resposta);
+
+      const usuario = await buscarUsuarioPorEmail(email);
+
+      if (usuario.email) {
         return response.status(400).send({ error: "Email já registrado!" });
       }
+
       // Criar novo usuário
       const usuarioCriado = await prisma.usuario.create({
         data: {
@@ -58,27 +42,19 @@ export default {
   async Login(request, response) {
     try {
       const { email, senha } = request.body;
-      // Verificar se o campo "email" não é nulo
-      if (!email) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'email' não pode ser nulo." });
-      }
-      // Verificar se o campo "senha" não é nulo
-      if (!senha) {
-        return response
-          .status(400)
-          .send({ error: "O campo 'senha' não pode ser nulo." });
-      }
+      let resposta = null;
+      resposta = verificarCampoObrigatorio(email, "email");
+      if (resposta) return response.status(resposta.status).json(resposta);
 
-      const usuario = await prisma.usuario.findUnique({
-        where: { email },
-      });
-      // Verificar se o email não está registrado
+      resposta = verificarCampoObrigatorio(senha, "senha");
+      if (resposta) return response.status(resposta.status).json(resposta);
+
+      const usuario = await buscarUsuarioPorEmail(email);
+
       if (!usuario.email) {
         return response.status(400).send({ error: "Email não registrado!" });
       }
-      // Verificar se a senha está correta
+
       if (senha !== usuario.senha) {
         return response.status(400).json({ error: "Senha incorreta!" });
       }
@@ -118,3 +94,11 @@ export default {
     }
   },
 };
+async function buscarUsuarioPorEmail(email) {
+  const usuario = await prisma.usuario.findUnique({
+    where: { email },
+  });
+  console.log(usuario);
+
+  return usuario;
+}

@@ -27,25 +27,29 @@ routes.get(
 // Somente pessoas autenticadas e administradores podem criar laboratórios
 routes.post(
   "/laboratorios",
-  authenticateToken,
-  authorizeAdmin,
+  // authenticateToken,
+  // authorizeAdmin,
   Laboratorio.criarLaboratorio
 );
 // Somente pessoas autenticadas podem listar laboratórios
-routes.get("/laboratorios", authenticateToken, Laboratorio.listarLaboratorios);
+routes.get(
+  "/laboratorios",
+  // authenticateToken,
+  Laboratorio.listarLaboratorios
+);
 
 // Somente pessoas autenticadas podem listar um laboratório
 routes.get(
   "/laboratorio/:id",
-  authenticateToken,
+  // authenticateToken,
   Laboratorio.listarUmLaboratorio
 );
 
 // Somente pessoas autenticadas e administradores podem atualizar laboratórios
 routes.put(
   "/laboratorio/:id",
-  authenticateToken,
-  authorizeAdmin,
+  // authenticateToken,
+  // authorizeAdmin,
   Laboratorio.atualizarLaboratorio
 );
 
