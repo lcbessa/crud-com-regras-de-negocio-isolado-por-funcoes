@@ -81,7 +81,6 @@ export default {
         });
       }
 
-      // Conflito de Horários de Reserva (Não pode haver conflito de horários de reserva)
       const conflito = await conflitoReserva(
         dataHoraInicio,
         dataHoraFim,
@@ -238,7 +237,6 @@ export default {
         });
       }
 
-      // Conflito de Horários de Reserva (Não pode haver conflito de horários de reserva)
       const conflito = await conflitoReserva(
         dataHoraInicio,
         dataHoraFim,
@@ -246,9 +244,7 @@ export default {
       );
 
       if (conflito) {
-        return response
-          .status(400)
-          .send({ error: "Conflito de horários de reserva." });
+        return response.status(400).send({ error: "Conflito de horários." });
       }
 
       // Atualiza a reserva no banco de dados
@@ -335,7 +331,9 @@ function duracaoMinimaReserva(dataHoraInicio, dataHoraFim) {
   }
   return null;
 }
+
 async function conflitoReserva(dataHoraInicio, dataHoraFim, laboratorioId) {
+  // RN33 - Não pode haver mais de uma Reserva para o mesmo Laboratório no mesmo horário.
   const conflito = await prisma.reserva.findFirst({
     where: {
       laboratorioId,
@@ -343,22 +341,22 @@ async function conflitoReserva(dataHoraInicio, dataHoraFim, laboratorioId) {
         {
           // A nova reserva começa durante uma reserva existente
           AND: [
-            { dataHoraInicio: { lte: dataHoraInicio } }, // A reserva existente começa antes ou no mesmo instante que a nova reserva
-            { dataHoraFim: { gte: dataHoraInicio } }, // A reserva existente termina depois ou no mesmo instante que o início da nova reserva
+            { dataHoraInicio: { lte: dataHoraInicio } },
+            { dataHoraFim: { gte: dataHoraInicio } },
           ],
         },
         {
           // A nova reserva termina durante uma reserva existente
           AND: [
-            { dataHoraInicio: { lte: dataHoraFim } }, // A reserva existente começa antes ou no mesmo instante que o fim da nova reserva
-            { dataHoraFim: { gte: dataHoraFim } }, // A reserva existente termina depois ou no mesmo instante que o fim da nova reserva
+            { dataHoraInicio: { lte: dataHoraFim } },
+            { dataHoraFim: { gte: dataHoraFim } },
           ],
         },
         {
           // A nova reserva engloba completamente uma reserva existente
           AND: [
-            { dataHoraInicio: { gte: dataHoraInicio } }, // A reserva existente começa depois ou no mesmo instante que o início da nova reserva
-            { dataHoraFim: { lte: dataHoraFim } }, // A reserva existente termina antes ou no mesmo instante que o fim da nova reserva
+            { dataHoraInicio: { gte: dataHoraInicio } },
+            { dataHoraFim: { lte: dataHoraFim } },
           ],
         },
       ],
